@@ -54,8 +54,12 @@ public class GvrReticle : MonoBehaviour, IGvrGazePointer {
   private float reticleInnerDiameter = 0.0f;
   private float reticleOuterDiameter = 0.0f;
 
+    private GodScript m_gs;
+
   void Start () {
     CreateReticleVertices();
+
+        m_gs = FindObjectOfType<GodScript>() as GodScript;
 
     materialComp = gameObject.GetComponent<Renderer>().material;
   }
@@ -128,7 +132,8 @@ public class GvrReticle : MonoBehaviour, IGvrGazePointer {
   /// Called when a trigger event is finished. This is practically when
   /// the user releases the trigger.
   public void OnGazeTriggerEnd(Camera camera) {
-    // Put your reticle trigger end logic here :)
+        // Put your reticle trigger end logic here :)
+        m_gs.Triggered();
   }
 
   public void GetPointerRadius(out float innerRadius, out float outerRadius) {

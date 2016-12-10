@@ -3,21 +3,25 @@ using System.Collections;
 using System.Linq;
 using System.Collections.Generic;
 
-public class GodScript : MonoBehaviour {
+public class GodScript : MonoBehaviour
+{
 
     #region member variables
 
     public GameObject m_selected;
+    public GameObject m_mountain;
 
     #endregion
 
-    void Start () {
-	
-	}
-	
-	void Update () {
-	
-	}
+    void Start()
+    {
+
+    }
+
+    public void Triggered()
+    {
+        Application.Quit();
+    }
 
     public void Select(GameObject sel)
     {
@@ -32,17 +36,26 @@ public class GodScript : MonoBehaviour {
     public void ParseCommand(string command)
     {
         //check if we have a target
-        if (m_selected != null)
-        {
-            string upCmd = command.ToUpper();
+        string upCmd = command.ToUpper();
 
-            List<string> commTokens = upCmd.Split(' ').ToList();
-            if (m_selected)
+        List<string> commTokens = upCmd.Split(' ').ToList();
+        if (m_selected)
+        {
+            if (commTokens.Contains("SMITE") || commTokens.Contains("KILL") || commTokens.Contains("DESTROY"))
             {
-                if (commTokens.Contains("SMITE") || commTokens.Contains("KILL") || commTokens.Contains("DESTROY"))
+                m_selected.GetComponent<Interactible>().Kill();
+                m_selected = null;
+            }
+        }
+        else
+        {
+            if (commTokens.Contains("MOUNTAIN"))
+            {
+                RaycastHit hit;
+                if (Physics.Raycast(transform.position, Vector3.forward, out hit))
                 {
-                    m_selected.GetComponent<Interactible>().Kill();
-                    m_selected = null;
+                    if (hit.collider.tag == "ground")
+                        Instantiate(m_mountain, hit.point, Quaternion.identity);
                 }
             }
         }
