@@ -30,7 +30,7 @@ namespace Gvr.Internal {
     private const int kSocketReadTimeoutMillis = 5000;
 
     // Minimum interval, in seconds, between attempts to reconnect the socket.
-    private const float kMinReconnectInterval = 1f;
+    private const float kMinReconnectInterval = 5.0f;
 
     private TcpClient phoneMirroringSocket;
 
@@ -40,13 +40,12 @@ namespace Gvr.Internal {
 
     private volatile bool shouldStop = false;
 
-    // Flag used to limit connection state logging to initial failure and successful reconnects.
-    private volatile bool lastConnectionAttemptWasSuccessful = true;
-
     private EmulatorManager phoneRemote;
     public bool connected { get; private set; }
 
     public void Init(EmulatorManager remote) {
+      Debug.Log ("Setting up socket.");
+
       phoneRemote = remote;
 
       if (EmulatorConfig.Instance.PHONE_EVENT_MODE != EmulatorConfig.Mode.OFF) {
@@ -55,101 +54,77 @@ namespace Gvr.Internal {
       }
     }
 
-    private void phoneEventSocketLoop() {
-      while (!shouldStop) {
-        long lastConnectionAttemptTime = DateTime.Now.Ticks;
-        try {
-          phoneConnect();
-        } catch(Exception e) {
-          if (lastConnectionAttemptWasSuccessful) {
-            Debug.LogWarningFormat("{0}\n{1}", e.Message, e.StackTrace);
-            // Suppress additional failures until we have successfully reconnected.
-            lastConnectionAttemptWasSuccessful = false;
-          }
-        }
-
-        // Wait a while in order to enforce the minimum time between connection attempts.
-        TimeSpan elapsed = new TimeSpan(DateTime.Now.Ticks - lastConnectionAttemptTime);
-        float toWait = kMinReconnectInterval - (float) elapsed.TotalSeconds;
-        if (toWait > 0) {
-          Thread.Sleep((int) (toWait * 1000));
-        }
-      }
-    }
-
-    private void phoneConnect() {
-      string addr = EmulatorConfig.Instance.PHONE_EVENT_MODE == EmulatorConfig.Mode.USB
-        ? EmulatorConfig.USB_SERVER_IP : EmulatorConfig.WIFI_SERVER_IP;
-
-      try {
-        if (EmulatorConfig.Instance.PHONE_EVENT_MODE == EmulatorConfig.Mode.USB) {
-          setupPortForwarding(kPhoneEventPort);
-        }
-        TcpClient tcpClient = new TcpClient(addr, kPhoneEventPort);
-        connected = true;
-        ProcessConnection(tcpClient);
-        tcpClient.Close();
-      } finally {
-        connected = false;
-      }
-    }
-
     private void setupPortForwarding(int port) {
-#if !UNITY_WEBPLAYER
       string adbCommand = string.Format("adb forward tcp:{0} tcp:{0}", port);
-      System.Diagnostics.Process myProcess = new System.Diagnostics.Process();
+      System.Diagnostics.Process myProcess;
 
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-      string processFilename = "CMD.exe";
-      string processArguments = @"/k " + adbCommand + " & exit";
-
-      // See "Common Error Lookup Tool" (https://www.microsoft.com/en-us/download/details.aspx?id=985)
-      // MSG_DIR_BAD_COMMAND_OR_FILE (cmdmsg.h)
-      int kExitCodeCommandNotFound = 9009; // 0x2331
-
-#else
-      string processFilename = "bash";
-      string processArguments = string.Format("-l -c \"{0}\"", adbCommand);
-
-      // "command not found" (see http://tldp.org/LDP/abs/html/exitcodes.html)
-      int kExitCodeCommandNotFound = 127;
-#endif // UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-
+#if UNITY_EDITOR_WIN
+      string cmd = @"/k " + adbCommand + " & exit";
+      Debug.Log ("Executing: [" + cmd + "]");
+      myProcess = new System.Diagnostics.Process();
       System.Diagnostics.ProcessStartInfo myProcessStartInfo =
-        new System.Diagnostics.ProcessStartInfo(processFilename, processArguments);
+        new System.Diagnostics.ProcessStartInfo("CMD.exe", cmd);
       myProcessStartInfo.UseShellExecute = false;
-      myProcessStartInfo.RedirectStandardError = true;
+      myProcessStartInfo.RedirectStandardOutput = true;
       myProcessStartInfo.CreateNoWindow = true;
       myProcess.StartInfo = myProcessStartInfo;
       myProcess.Start();
+#else
+      Debug.LogFormat("Trying to launch adb: {0}", adbCommand);
+      myProcess = System.Diagnostics.Process.Start("bash", string.Format("-l -c \"{0}\"",
+                                                                         adbCommand));
+#endif
       myProcess.WaitForExit();
-      // Also wait for HasExited here, to avoid ExitCode access below occasionally throwing InvalidOperationException
-      while (!myProcess.HasExited) {
-        Thread.Sleep(1);
-      }
       int exitCode = myProcess.ExitCode;
-      string standardError = myProcess.StandardError.ReadToEnd();
       myProcess.Close();
-
       if (exitCode == 0) {
-        // Port forwarding setup successfully.
-        return;
+        Debug.LogFormat("adb process succeeded (exit code 0).");
+      } else {
+        Debug.LogErrorFormat("adb process FAILED (exit code {0}). Check that the Android SDK " +
+            "is installed and that the adb command is in your PATH environment variable.",
+            exitCode);
       }
+    }
 
-      if (exitCode == kExitCodeCommandNotFound) {
-        // Caught by phoneEventSocketLoop.
-        throw new Exception(
-          "Android Debug Bridge (`adb`) command not found." +
-          "\nVerify that the Android SDK is installed and that the directory containing" +
-          " `adb` is included in your PATH environment variable.");
+    private void phoneEventSocketLoop() {
+      long lastConnectionAttemptTime = 0;
+      bool isFirstTry = true;
+
+      while (!shouldStop) {
+        string addr = EmulatorConfig.Instance.PHONE_EVENT_MODE == EmulatorConfig.Mode.USB
+          ? EmulatorConfig.USB_SERVER_IP : EmulatorConfig.WIFI_SERVER_IP;
+
+        // Wait a while in order to enforce the minimum time between connection attempts.
+        if (!isFirstTry) {
+          TimeSpan elapsed = new TimeSpan(DateTime.Now.Ticks - lastConnectionAttemptTime);
+          float toWait = kMinReconnectInterval - (float) elapsed.TotalSeconds;
+          if (toWait > 0) {
+            Thread.Sleep((int) (toWait * 1000));
+          }
+        }
+
+        isFirstTry = false;
+        lastConnectionAttemptTime = DateTime.Now.Ticks;
+
+        try {
+          if (EmulatorConfig.Instance.PHONE_EVENT_MODE == EmulatorConfig.Mode.USB) {
+            Debug.LogFormat("Attempting to set up port forwarding.");
+            setupPortForwarding(kPhoneEventPort);
+          }
+          Debug.LogFormat("Attempting to connect to {0}:{1}.", addr, kPhoneEventPort);
+          TcpClient tcpClient = new TcpClient(addr, kPhoneEventPort);
+          Debug.Log("Connected to phone event socket: " + addr + ":" + kPhoneEventPort);
+          connected = true;
+          ProcessConnection(tcpClient);
+          tcpClient.Close();
+          Debug.Log("Disconnected.");
+          connected = false;
+          continue;
+        } catch (Exception e) {
+          Debug.LogWarning("Error connecting to phone event socket: " + addr + ":"
+              + kPhoneEventPort + ". " + e);
+        }
       }
-      // Caught by phoneEventSocketLoop.
-      throw new Exception(
-        String.Format(
-          "Failed to setup port forwarding." +
-          " Exit code {0} returned by process: {1} {2}\n{3}",
-          exitCode, processFilename, processArguments, standardError));
-#endif  // !UNITY_WEBPLAYER
     }
 
     private void ProcessConnection(TcpClient tcpClient) {
@@ -160,31 +135,24 @@ namespace Gvr.Internal {
       while (!shouldStop) {
         int bytesRead = blockingRead(stream, buffer, 0, 4);
         if (bytesRead < 4) {
-          // Caught by phoneEventSocketLoop.
-          throw new Exception(
-            "Failed to read from controller emulator app event socket." +
-            "\nVerify that the controller emulator app is running.");
+          Debug.LogWarning("Socket read failed, considering socket to have been disconnected.");
+          return;
         }
         int msgLen = unpack32bits(correctEndianness(buffer), 0);
 
         byte[] dataBuffer = new byte[msgLen];
         bytesRead = blockingRead(stream, dataBuffer, 0, msgLen);
         if (bytesRead < msgLen) {
-          // Caught by phoneEventSocketLoop.
-          throw new Exception(
-            "Failed to read from controller emulator app event socket." +
-            "\nVerify that the controller emulator app is running.");
+          Debug.LogWarning("Socket read failed, considering socket to have been disconnected.");
+          return;
         }
 
         PhoneEvent proto =
             PhoneEvent.CreateBuilder().MergeFrom(dataBuffer).Build();
         phoneRemote.OnPhoneEvent(proto);
 
-        if (!lastConnectionAttemptWasSuccessful) {
-          Debug.Log("Successfully connected to controller emulator app.");
-          // Log first failure after above successful read from event socket.
-          lastConnectionAttemptWasSuccessful = true;
-        }
+        // Debug.Log(BitConverter.ToString(dataBuffer));
+        // Debug.Log(proto.Type);
       }
     }
 
@@ -211,6 +179,7 @@ namespace Gvr.Internal {
     }
 
     void OnDestroy() {
+      Debug.Log("Shutting down ClientSocket.");
       shouldStop = true;
 
       if (phoneMirroringSocket != null) {

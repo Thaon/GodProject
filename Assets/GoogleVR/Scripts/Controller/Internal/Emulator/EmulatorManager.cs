@@ -21,10 +21,6 @@ using proto;
 /// @cond
 namespace Gvr.Internal {
   class EmulatorManager : MonoBehaviour {
-
-    private IEnumerator emulatorUpdate;
-    private WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
-
     public static EmulatorManager Instance {
       get {
         if (instance == null) {
@@ -176,18 +172,15 @@ namespace Gvr.Internal {
         enabled = false;
         return;
       }
-    }
-
-    public void Start() {
       socket = gameObject.AddComponent<EmulatorClientSocket>();
       socket.Init(this);
-      emulatorUpdate = EndOfFrame();
-      StartCoroutine(emulatorUpdate);
+      StartCoroutine("EndOfFrame");
     }
 
     IEnumerator EndOfFrame() {
       while (true) {
-        yield return waitForEndOfFrame;
+        yield return new WaitForEndOfFrame();
+
         lock (pendingEvents.SyncRoot) {
           while (pendingEvents.Count > 0) {
             PhoneEvent phoneEvent = (PhoneEvent) pendingEvents.Dequeue();
