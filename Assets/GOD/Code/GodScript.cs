@@ -51,10 +51,10 @@ public class GodScript : MonoBehaviour
         }
         else
         {
-            if (commTokens.Contains("MOUNTAIN"))
+            if (commTokens.Contains("MOUNTAIN") || commTokens.Contains("RAISE"))
             {
                 RaycastHit hit;
-                if (Physics.Raycast(transform.position, Vector3.forward, out hit))
+                if (Physics.Raycast(transform.position, Camera.main.transform.forward, out hit))
                 {
                     if (hit.collider.tag == "ground")
                         Instantiate(m_mountain, hit.point, Quaternion.identity);

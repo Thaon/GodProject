@@ -47,13 +47,16 @@ public class SpeechRecognizer : MonoBehaviour
 		switch (int.Parse (e)) {
 		case SpeechRecognizerManager.EVENT_SPEECH_READY:
 			DebugLog ("Ready for speech");
-			break;
+                m_text.text = "ready to listen";
+                break;
 		case SpeechRecognizerManager.EVENT_SPEECH_BEGINNING:
 			DebugLog ("User started speaking");
-			break;
+                m_text.text = "LISTENING!";
+                break;
 		case SpeechRecognizerManager.EVENT_SPEECH_END:
 			DebugLog ("User stopped speaking");
-			break;
+                m_text.text = "";
+                break;
 		}
 	}
 
@@ -113,7 +116,6 @@ public class SpeechRecognizer : MonoBehaviour
     {
         if (!_isListening)
         {
-            m_text.text = "LISTENING!";
             _isListening = true;
             _speechManager.StartListening(1, "en-US");
         }
@@ -123,7 +125,6 @@ public class SpeechRecognizer : MonoBehaviour
     {
         if (_isListening)
         {
-            m_text.text = "";
             _speechManager.StopListening();
             _isListening = false;
         }
