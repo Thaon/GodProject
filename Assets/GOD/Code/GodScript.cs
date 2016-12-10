@@ -11,16 +11,18 @@ public class GodScript : MonoBehaviour
     public GameObject m_selected;
     public GameObject m_mountain;
 
+    private SpeechRecognizer m_sr;
+
     #endregion
 
     void Start()
     {
-
+        m_sr = GetComponent<SpeechRecognizer>();
     }
 
     public void Triggered()
     {
-        Application.Quit();
+        m_sr.Listen();
     }
 
     public void Select(GameObject sel)

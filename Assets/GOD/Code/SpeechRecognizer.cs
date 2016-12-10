@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.UI;
 using System.Collections.Generic;
 
 public class SpeechRecognizer : MonoBehaviour
@@ -8,6 +9,8 @@ public class SpeechRecognizer : MonoBehaviour
 	private string _message = "";
 
     private GodScript m_gs;
+
+    public Text m_text;
 
 	#region MONOBEHAVIOUR
 	
@@ -110,6 +113,7 @@ public class SpeechRecognizer : MonoBehaviour
     {
         if (!_isListening)
         {
+            m_text.text = "LISTENING!";
             _isListening = true;
             _speechManager.StartListening(1, "en-US");
         }
@@ -119,6 +123,7 @@ public class SpeechRecognizer : MonoBehaviour
     {
         if (_isListening)
         {
+            m_text.text = "";
             _speechManager.StopListening();
             _isListening = false;
         }
